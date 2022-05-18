@@ -1,6 +1,7 @@
 import requests
 import os
 import json
+from flask import Flask
 
 LINE_TOKEN = os.environ['LINE_TOKEN']
 LINE_NOTIFY_URL = 'https://notify-api.line.me/api/notify'
@@ -13,14 +14,13 @@ FAMILY_NAME = os.environ['FAMILY_NAME']
 ID_CARD_NO = os.environ['ID_CARD_NO']
 DATE_OF_BIRTH = os.environ['DATE_OF_BIRTH']
 
-
 class UserInfo:
     def __init__(self, given_name: str, family_name: str, date_of_birth: str, id: str) -> None:
         self.given_name = given_name
         self.family_name = family_name
         self.date_of_birth = date_of_birth
         self.id = id
-        
+
 
 def notify_line(text: str)-> None:
     headersAuth = {
@@ -47,13 +47,23 @@ def get_ielts_score(user_info: UserInfo):
     return post_result
 
 
-if __name__ == "__main__":
+app = Flask(__name__)
+
+
+@app.route("/")
+def hello_world():
     ielts_user_info = UserInfo(given_name=GIVEN_NAME, family_name=FAMILY_NAME, id=ID_CARD_NO, date_of_birth=DATE_OF_BIRTH)
     ielts_post_result = get_ielts_score(ielts_user_info)
     
     ielts_post_result_json = ielts_post_result.json()
     print(ielts_post_result, ielts_post_result_json)
-    
-    if ielts_post_result_json['statusCode'] == 404:
+
+    if ielts_post_result_json['statusCode'] != 404:
         line_post_result = notify_line(json.dumps(ielts_post_result_json))
-        print(ielts_post_result,  line_post_result, 'post_result')
+        return f"{ielts_post_result} {line_post_result}"
+    
+    return 'score not out yet' 
+
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
