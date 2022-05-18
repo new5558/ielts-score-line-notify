@@ -1,5 +1,7 @@
 # IELTS Score Line Notify Bot
 
+![image](https://user-images.githubusercontent.com/12471844/169115182-5e520ff8-796e-41d4-b315-3439ffd459e6.png)
+
 ## Intuition
 
 Have you ever been fraustrated waiting for your IELTS result to come by? Here is the solution, IELTS Score Notification Bot via Line Notify! Deployable on Google Cloud Run and Other VMs services.
