@@ -9,7 +9,6 @@ Have you ever been fraustrated waiting for your IELTS result to come by? Here is
 - [x] Get API Endpoint
 - [x] Automatically get IELTS score (Need Google Cloud Run Cronjob)
 - [x] Supported Google Cloud Run and VMs. However, all server/serverless method should works.
--
 
 ## Required Environment Variables
 

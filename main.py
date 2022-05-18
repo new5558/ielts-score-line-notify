@@ -56,13 +56,23 @@ def hello_world():
     ielts_post_result = get_ielts_score(ielts_user_info)
     
     ielts_post_result_json = ielts_post_result.json()
-    print(ielts_post_result, ielts_post_result_json)
+    
 
     if ielts_post_result_json['statusCode'] != 404:
-        line_post_result = notify_line(json.dumps(ielts_post_result_json))
-        return f"{ielts_post_result} {line_post_result}"
+        candidate_result = ielts_post_result_json['response']['GetAllCandidateResultsResponse']['GetAllCandidateResultsResult']['CandidateResults']['CandidateResultsViewModels']
+        speaking_score = candidate_result['SbandScore']
+        reading_score = candidate_result['RbandScore']
+        writing_score = candidate_result['WbandScore']
+        listening_score = candidate_result['LbandScore']
+        overall_score = candidate_result['OverallResult']
+
+        message = f"\nYour Overall IELTS Score is {overall_score} \n Speaking Score: {speaking_score} \n Reading Score: {reading_score} \n Writing Score: {writing_score} \n Listening Score: {listening_score}"
+
+        line_post_result = notify_line(message)
+
+        return candidate_result
     
-    return 'score not out yet' 
+    return 'score not out yet'
 
 
 if __name__ == "__main__":
