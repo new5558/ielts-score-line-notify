@@ -1,25 +1,27 @@
 import requests
 import os
-import json
 from flask import Flask
+
+import time
+import threading
+# ---- สำหรับ Investor ---
+from settrade_v2 import Investor
+
 
 LINE_TOKEN = os.environ['LINE_TOKEN']
 LINE_NOTIFY_URL = 'https://notify-api.line.me/api/notify'
+WAITTIME = 30
+DIFF_THRESOLD = 1.2
 
-IELTS_API_KEY = os.environ['IELTS_API_KEY']
-IELTS_SCORE_URL = 'https://api.ieltsweb.idp.com/v1/externalapi/get-ielts-results'
 
-GIVEN_NAME = os.environ['GIVEN_NAME']
-FAMILY_NAME = os.environ['FAMILY_NAME']
-ID_CARD_NO = os.environ['ID_CARD_NO']
-DATE_OF_BIRTH = os.environ['DATE_OF_BIRTH']
-
-class UserInfo:
-    def __init__(self, given_name: str, family_name: str, date_of_birth: str, id: str) -> None:
-        self.given_name = given_name
-        self.family_name = family_name
-        self.date_of_birth = date_of_birth
-        self.id = id
+investor_set = Investor(
+    app_id=os.environ['SETTRADE_APP_ID'],
+    app_secret=os.environ['SETTRADE_APP_SECRET'],
+    broker_id=os.environ['SETTRADE_BROKER_ID'],
+    app_code=os.environ['SETTRADE_APP_CODE'],
+    is_auto_queue=False
+)
+realtime_set = investor_set.RealtimeDataConnection()
 
 
 def notify_line(text: str)-> None:
@@ -30,49 +32,94 @@ def notify_line(text: str)-> None:
     return post_result
 
 
-def get_ielts_score(user_info: UserInfo):
-    ielts_payload = {
-        "type": "Results", 
-        "details":{
-            "givenName": user_info.given_name,
-            "familyName": user_info.family_name,
-            "ID": user_info.id,
-            "DOB": user_info.date_of_birth
-        }
+def initialize_globals():
+    global latest_prices, stop_event, subscriber1, subscriber2
+    latest_prices = {
+        "INTUCH": None,
+        "GULF": None
     }
-    ielts_payload_json = json.dumps(ielts_payload)
-    headers={"x-api-key" : IELTS_API_KEY}
-    
-    post_result = requests.post(IELTS_SCORE_URL, ielts_payload_json, headers = headers)
-    return post_result
+    stop_event = threading.Event()
+    subscriber1 = None
+    subscriber2 = None
 
+
+def stop_subscribers():
+    global subscriber1, subscriber2, stop_event
+    if subscriber1:
+        subscriber1.stop()
+    if subscriber2:
+        subscriber2.stop()
+    stop_event.set()
+    print("Stopped subscribers")
+
+
+def subscribe_intuch(message):
+    speical_dividend = 4.5
+    new_shares_conversion_rate = 1.69335
+    current_price = message['data']['ask_price1']
+    adj_price = current_price - speical_dividend
+    price_per_new_share = adj_price / new_shares_conversion_rate
+    latest_prices["INTUCH"] = price_per_new_share
+    calculate_difference()
+
+def subscribe_gulf(message):
+    speical_dividend = 0
+    new_shares_conversion_rate = 1.02974
+    current_price = message['data']['ask_price1']
+    adj_price = current_price - speical_dividend
+    price_per_new_share = adj_price / new_shares_conversion_rate
+    latest_prices["GULF"] = price_per_new_share
+    calculate_difference()
+
+def calculate_difference():
+    intuch_price = latest_prices.get("INTUCH")
+    gulf_price = latest_prices.get("GULF")
+    if intuch_price is not None and gulf_price is not None:
+        price_difference_short_gulf = (gulf_price - intuch_price)/gulf_price
+        price_difference_short_intuch = (intuch_price - gulf_price)/intuch_price
+        diff_max = max(abs(price_difference_short_gulf), abs(price_difference_short_intuch))
+        print(f"Price Difference: GULF/INTUCH = {diff_max * 100}")
+        if diff_max > DIFF_THRESOLD:
+            if price_difference_short_gulf > price_difference_short_intuch:
+                notify_line(f"price_difference: {diff_max * 100}\n Suggestion: S GULF, L INTUCH")
+            else:
+                notify_line(f"price_difference: {diff_max * 100}\n Suggestion: L GULF, S INTUCH")
+            stop_subscribers()
+
+
+def start_subscribers():
+    global subscriber1, subscriber2, stop_event
+    subscriber1 = realtime_set.subscribe_bid_offer("INTUCH", subscribe_intuch)
+    subscriber1.start() 
+    subscriber2 = realtime_set.subscribe_bid_offer("GULF", subscribe_gulf)
+    subscriber2.start()
+
+    def stop_after_timeout():
+        stop_subscribers()
+        
+
+    timer = threading.Timer(WAITTIME, stop_after_timeout)
+    timer.start()
+
+    while not stop_event.is_set():
+        time.sleep(0.1)
+
+    timer.cancel()
 
 app = Flask(__name__)
 
 
+
 @app.route("/")
 def hello_world():
-    ielts_user_info = UserInfo(given_name=GIVEN_NAME, family_name=FAMILY_NAME, id=ID_CARD_NO, date_of_birth=DATE_OF_BIRTH)
-    ielts_post_result = get_ielts_score(ielts_user_info)
-    
-    ielts_post_result_json = ielts_post_result.json()
-    
+    initialize_globals()
 
-    if ielts_post_result_json['statusCode'] != 404:
-        candidate_result = ielts_post_result_json['response']['GetAllCandidateResultsResponse']['GetAllCandidateResultsResult']['CandidateResults']['CandidateResultsViewModels']
-        speaking_score = candidate_result['SbandScore']
-        reading_score = candidate_result['RbandScore']
-        writing_score = candidate_result['WbandScore']
-        listening_score = candidate_result['LbandScore']
-        overall_score = candidate_result['OverallResult']
+    thread = threading.Thread(target=start_subscribers)
+    thread.start()
 
-        message = f"\nYour Overall IELTS Score is {overall_score} \n Speaking Score: {speaking_score} \n Reading Score: {reading_score} \n Writing Score: {writing_score} \n Listening Score: {listening_score}"
+    thread.join(timeout=5)  # Wait for the thread to finish
 
-        line_post_result = notify_line(message)
-
-        return candidate_result
-    
-    return 'score not out yet'
+    return 'finish'
 
 
 if __name__ == "__main__":

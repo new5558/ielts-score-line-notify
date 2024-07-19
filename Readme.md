@@ -27,8 +27,9 @@ PORT: Port to be exposed to 8080
 ## Develop Locally
 
 `docker build -t ielts-bot .`
+`docker build -t set-bot .`
 
-`docker run -e LINE_TOKEN=<LINE_TOKEN> -e IELTS_API_KEY=<IELTS_API_KEY> -e GIVEN_NAME=<GIVEN_NAME> -e FAMILY_NAME=<FAMILY_NAME> -e ID_CARD_NO=<ID_CARD_NO> -e DATE_OF_BIRTH=<DATE_OF_BIRTH> -e PORT=<PORT> -p 3000:8080 ielts-bot`
+`docker run  --env-file .env -p 3000:8080 set-bot`
 
 ## Limitation/Possible Improvements
 
